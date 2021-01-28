@@ -12,17 +12,22 @@ using A65Insurance.Models;
 using Newtonsoft.Json;
 using Microsoft.AspNetCore.Cors;
 using System.Net.Http;
+using System.Runtime.Caching;
+using Microsoft.Extensions.Caching.Memory;
 
-// Release 2 - reads for plans and services; /UpdatePlan api routine added.
+// Release 2 - reads for plans and services; /UpdatePlan api routine added. 
 
 namespace A65Insurance.Controllers
 { 
     [Route("api/[controller]")]
-    [ApiController]
+    [ApiController]  
     public class CustomerController : ControllerBase
     {
         private readonly A45InsuranceContext _context; 
         private readonly IConfiguration _configuration;
+        private readonly IMemoryCache memoryCache;
+
+        public bool HttpOnly { get; private set; }
 
         protected string getVar(string key)
         {
@@ -36,10 +41,11 @@ namespace A65Insurance.Controllers
 
         }
 
-        public CustomerController(A45InsuranceContext context, IConfiguration configuration)
+        public CustomerController(A45InsuranceContext context, IConfiguration configuration, IMemoryCache mc)
         {
             _context = context;
-            _configuration = configuration; 
+            _configuration = configuration;
+            memoryCache = mc; 
         }
 
         // GET: api/Customer
@@ -62,6 +68,100 @@ namespace A65Insurance.Controllers
             }
 
             return Ok(customer); 
+
+        }
+
+        // GET: api/signin/name
+        [HttpGet("/api/Signin/{name}")] 
+        public async Task<ActionResult<Customer>> Signin(string name)
+        {
+            // same a get customer that is used for reg dup check but this on
+            // returns a token.
+
+            var customer = await _context.Customer.FirstOrDefaultAsync<Customer>
+                (cust => cust.CustId == name);
+
+            if (customer == null)
+            {
+                return NotFound();
+            }
+
+            ReturnToken(customer.CustId); 
+
+            return Ok(customer);
+
+        }
+
+        private void ReturnToken(string custId)
+        {
+            
+
+            var value = string.Empty;
+            var rand = new Random();
+            for (int i = 0; i <= 19; i++)
+            {
+                value += rand.Next(10);
+            }  
+             
+
+            Response.Cookies.Append("A65TOKEN", value, new CookieOptions()
+            {
+                HttpOnly = false
+            }); 
+
+            var minutes = 14;
+            var expirationSeconds = minutes * 60; 
+
+            var options =
+                new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromSeconds(expirationSeconds));
+
+            memoryCache.Set(custId.Trim(), value, options);
+
+        }
+
+        // GET: api/signin70/name
+        [HttpGet("/api/Signin70/{name}")]
+        public async Task<ActionResult<Customer>> Signin70(string name)
+        {
+            // same a get customer that is used for reg dup check but this on
+            // returns a token. used by blazor a70 only.
+
+            var customer = await _context.Customer.FirstOrDefaultAsync<Customer>
+                (cust => cust.CustId == name);
+
+            if (customer == null)
+            {
+                return NotFound();
+            }
+
+            // for blazor pass token in 'encrypted' customer field.
+            customer.Encrypted = FieldToken(customer.CustId);
+
+            return Ok(customer);
+
+        }
+
+
+        private string FieldToken(string custId)
+        {
+
+
+            var value = string.Empty;
+            var rand = new Random();
+            for (int i = 0; i <= 19; i++)
+            {
+                value += rand.Next(10);
+            } 
+
+            var minutes = 14;
+            var expirationSeconds = minutes * 60;
+
+            var options =
+                new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromSeconds(expirationSeconds));
+
+            memoryCache.Set(custId.Trim(), value, options);
+
+            return value;
 
         }
 
@@ -191,9 +291,14 @@ namespace A65Insurance.Controllers
         [Route("/api/ChangePassword/")]
         public async Task<string> ResetPassword(
                [Bind("CustomerId,NewPassword")]PasswordChanger passwordChanger)
-        {  
+        {
 
-                var linqCustomer = from c in _context.Customer
+            if (HttpContext.Request.Headers["A65TOKEN"].Count == 0) // no token
+            {
+                return "BadRequest";
+            }
+
+            var linqCustomer = from c in _context.Customer
                                    where c.CustId == passwordChanger.CustomerId
                                    select c;
 
@@ -219,8 +324,13 @@ namespace A65Insurance.Controllers
 
         [HttpPut("")] //here
         [Route("/api/UpdateCustomerPlan/")]
-        public ActionResult<string> UpdatePlan([Bind("CustomerId, PlanName")] PlanInput plan) 
+        public ActionResult<HttpResponse> UpdatePlan([Bind("CustomerId, PlanName")] PlanInput plan) 
         {
+
+            if (NoTokenPresent(HttpContext, plan.CustomerId))
+            {
+                return BadRequest();
+            }
 
             // update custome plan.
 
@@ -236,7 +346,7 @@ namespace A65Insurance.Controllers
 
             _context.SaveChanges();
 
-            return "OK";
+            return Ok("OK");
 
 
         }
@@ -249,8 +359,11 @@ namespace A65Insurance.Controllers
              CustomerResetter reset)
         {
 
-
-                var findCurrentCustomer = from customer in _context.Customer
+            if (HttpContext.Request.Headers["A65TOKEN"].Count == 0) // no token
+            {
+                return "BadRequest";
+            }
+            var findCurrentCustomer = from customer in _context.Customer
                                    where customer.CustId == reset.CustomerId
                                    select customer;
                 bool exists = false;
@@ -345,8 +458,87 @@ namespace A65Insurance.Controllers
         [HttpPut("")]
         [Route("/api/UpdateCustomer/")]
 
-        public async Task<string> UpdateCustomer([FromBody] Customer customer)
+
+        private Boolean NoTokenPresent(HttpContext httpContext, string customerId)
+        { 
+
+            // true if no token present - works a60 and a70 ok. A65TOKEN,a65token seen in display...
+            if(HttpContext.Request.Headers["A65TOKEN"].Count == 0)
+            {
+                // no token found 
+                return false;
+            }
+
+            // verify proper value of token.  
+             
+
+            Microsoft.Extensions.Primitives.StringValues inputValue; 
+
+            if (!httpContext.Request.Headers.TryGetValue("A65TOKEN", out inputValue))
+            {
+                return false;  
+            }
+
+            string inputTokenValue = "";
+
+            if(!TryExtractBetween(inputValue, "A65TOKEN=",";", out inputTokenValue))
+            {
+                return false;
+            }
+           
+            string cacheValue = "";
+
+            if (!memoryCache.TryGetValue<string>(customerId, out cacheValue))
+            {
+
+                return false;
+            }
+
+            string tokenCachedValue = cacheValue.ToString();
+
+            return inputTokenValue != tokenCachedValue;
+
+        }
+
+        private bool TryExtractBetween(string input, string first, string second, out string result)
         {
+
+            // get characters betwen 1st and 2nd values. 
+            result = "";
+
+            int start = input.IndexOf(first);
+            if (start == -1)
+            {
+                return false;
+            }
+
+            start += first.Length;
+            int end = input.IndexOf(second, start);
+
+            if(end == -1)
+            {
+                return false;
+            }
+
+            if (end > start)
+            {
+                result = input.Substring(start, end - start);
+            }
+
+            return true;
+
+        }
+
+        [HttpPut("")]  
+        [Route("/api/UpdateCustomer/")]
+        public async Task<ActionResult<HttpResponse>> UpdateCustomer([FromBody] Customer customer)
+        {
+            
+            if (NoTokenPresent(HttpContext,customer.CustId))  
+            {
+                return BadRequest();
+            }  
+
             Customer cust = new Customer();
 
             // use specific fields prevent overposters! 
@@ -404,8 +596,8 @@ namespace A65Insurance.Controllers
                     item.PromotionCode = customer.PromotionCode;
                     _context.Update(item);
                 }
-                if (dupCount == 0) { return "NotFound"; };
-                if (dupCount > 1) { return "Duplicate"; };
+                if (dupCount == 0) { return Ok("Not Found"); };
+                if (dupCount > 1) { return Ok("Duplicate");  };
 
                 try
                 {
@@ -414,19 +606,23 @@ namespace A65Insurance.Controllers
                 }
                 catch (System.Exception)
                 {
-                    return "InternalServerError";
+                    return BadRequest("Server Error");
                 }
-                return "OK";
+
+                return Ok("Ok");
+                
             }
 
-            return "";
+            return BadRequest("unknown");
         }
+
+       
 
         [HttpPut]
         [Route("/api/AddClaimCount/{id}")]
         public async Task<int> AddClaimCount(string id)
         {
-
+                
             // return -1 if bad ; new claim count when update is ok.
 
             var linqCustomer = from c in _context.Customer
@@ -532,7 +728,12 @@ namespace A65Insurance.Controllers
 
 
                 _context.Customer.Add(customer);
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(); 
+                 
+                // Currently, post is ONLY called for registration, after authentication
+                // therefore produce token.
+
+                ReturnToken(customer.CustId);
 
                 return CreatedAtAction("GetCustomer", new { id = customer.Id }, customer);
 
@@ -540,6 +741,51 @@ namespace A65Insurance.Controllers
             return null;
         }
 
+
+        [HttpPost]
+        [Route("/api/PostCustomer70/")]
+        public async Task<ActionResult<Customer>> PostCustomer70(Customer customer)
+        {
+            Customer addCustomer = new Customer();
+
+            if (await TryUpdateModelAsync<Customer>(
+                    addCustomer,
+                    "AddCustomer",
+                    s => s.CustId,
+                    s => s.CustPassword,
+                    s => s.CustFirst,
+                    s => s.CustMiddle,
+                    s => s.CustLast,
+                    s => s.CustGender,
+                    s => s.CustPhone,
+                    s => s.CustEmail,
+                    s => s.CustCity,
+                    s => s.CustState,
+                    s => s.CustZip,
+                    s => s.CustBirthDate,
+                    s => s.Encrypted,
+                    s => s.CustPlan,
+                    s => s.PromotionCode,
+                    s => s.AppId,
+                    s => s.ExtendColors,
+                    s => s.ClaimCount))
+
+            {
+
+
+                _context.Customer.Add(customer);
+                await _context.SaveChangesAsync();
+
+                // Currently, post is ONLY called for registration, after authentication
+                // therefore produce token.
+
+                var token =  FieldToken(customer.CustId);
+
+                return Ok(token);
+
+            }
+            return null;
+        }
         // DELETE: api/Customer/5
         [HttpDelete("{id}")]
         public async Task<ActionResult<Customer>> DeleteCustomer(int id)
@@ -561,4 +807,5 @@ namespace A65Insurance.Controllers
             return _context.Customer.Any(e => e.Id == id);
         }
     }
+     
 }

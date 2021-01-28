@@ -18,7 +18,6 @@ namespace A65Insurance
 {
     public class Startup
     {
-
         string a60Origin = "";
         string a70Origin = "";
 
@@ -32,21 +31,22 @@ namespace A65Insurance
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-
             var noneFound = "";
 
             a60Origin = Configuration.GetValue<string>("A60Origin", noneFound);
             a70Origin = Configuration.GetValue<string>("A70Origin", noneFound);
 
-            string[] origions = { a60Origin, a70Origin }; 
+            string[] origions = { a60Origin, a70Origin };
 
             services.AddControllers();
-
 
             var connectionString = Configuration.GetValue<string>("Connect", noneFound);
 
             services.AddDbContext<A45InsuranceContext>(options =>
                 options.UseSqlServer(connectionString));
+
+
+            services.AddMemoryCache();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -57,14 +57,18 @@ namespace A65Insurance
                 app.UseDeveloperExceptionPage();
             }
 
-            //app.UseHttpsRedirection();
+           // app.UseHttpsRedirection();  
 
-            app.UseRouting();
+            app.UseRouting(); 
+
+            string blazorA70Token = "A65TOKEN"; 
+            string[] allowedHeaders = { HeaderNames.ContentType, blazorA70Token};
 
             app.UseCors(policy =>
-             policy.WithOrigins(a60Origin, a70Origin)
-             .AllowAnyMethod()
-             .WithHeaders(HeaderNames.ContentType));
+            policy.WithOrigins(a60Origin, a70Origin)
+            .AllowAnyMethod()
+            .WithHeaders(allowedHeaders)
+            .WithExposedHeaders("Set-Cookie")); // for Blazor A70.
 
             app.UseAuthorization();
 
