@@ -11,8 +11,7 @@ using Microsoft.Extensions.Configuration;
 using A65Insurance.Models;
 using Newtonsoft.Json;
 using Microsoft.AspNetCore.Cors;
-using System.Net.Http;
-using System.Runtime.Caching;
+using System.Net.Http; 
 using Microsoft.Extensions.Caching.Memory;
 
 // Release 2 - reads for plans and services; /UpdatePlan api routine added. 

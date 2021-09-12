@@ -8,7 +8,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Net.Http.Headers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,6 +17,7 @@ namespace A65Insurance
 {
     public class Startup
     {
+
         string a60Origin = "";
         string a70Origin = "";
 
@@ -38,15 +38,16 @@ namespace A65Insurance
 
             string[] origions = { a60Origin, a70Origin };
 
-            services.AddControllers();
+            services.AddControllers(); 
 
             var connectionString = Configuration.GetValue<string>("Connect", noneFound);
 
             services.AddDbContext<A45InsuranceContext>(options =>
                 options.UseSqlServer(connectionString));
 
-
             services.AddMemoryCache();
+
+
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -57,18 +58,14 @@ namespace A65Insurance
                 app.UseDeveloperExceptionPage();
             }
 
-           // app.UseHttpsRedirection();  
+            // app.UseHttpsRedirection();
 
             app.UseRouting(); 
 
-            string blazorA70Token = "A65TOKEN"; 
-            string[] allowedHeaders = { HeaderNames.ContentType, blazorA70Token};
-
             app.UseCors(policy =>
-            policy.WithOrigins(a60Origin, a70Origin)
-            .AllowAnyMethod()
-            .WithHeaders(allowedHeaders)
-            .WithExposedHeaders("Set-Cookie")); // for Blazor A70.
+              policy.WithOrigins(a60Origin, a70Origin)
+              .AllowAnyMethod()
+              .AllowAnyHeader());
 
             app.UseAuthorization();
 

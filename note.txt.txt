@@ -1,5 +1,0 @@
-
- added memory cache
- signin, register routines for blazor A70
- emit token by header (A65) or by content/field (A70)
- verify token upon post/put api calls
