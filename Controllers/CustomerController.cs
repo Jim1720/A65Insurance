@@ -45,7 +45,8 @@ namespace A65Insurance.Controllers
             _context = context;
             _configuration = configuration;
             memoryCache = mc; 
-        }
+        } 
+       
 
         // GET: api/Customer
         [HttpGet]
@@ -178,7 +179,7 @@ namespace A65Insurance.Controllers
             if(option == "Adm")
             {
                 return Ok(getVar("AdmId") + "," + getVar("AdmPassword"));
-            }
+            } 
 
             return "UnusedOption";
 
@@ -292,10 +293,7 @@ namespace A65Insurance.Controllers
                [Bind("CustomerId,NewPassword")]PasswordChanger passwordChanger)
         {
 
-            if (HttpContext.Request.Headers["A65TOKEN"].Count == 0) // no token
-            {
-                return "BadRequest";
-            }
+            
 
             var linqCustomer = from c in _context.Customer
                                    where c.CustId == passwordChanger.CustomerId
@@ -358,10 +356,7 @@ namespace A65Insurance.Controllers
              CustomerResetter reset)
         {
 
-            if (HttpContext.Request.Headers["A65TOKEN"].Count == 0) // no token
-            {
-                return "BadRequest";
-            }
+          
             var findCurrentCustomer = from customer in _context.Customer
                                    where customer.CustId == reset.CustomerId
                                    select customer;
@@ -539,32 +534,7 @@ namespace A65Insurance.Controllers
             }  
 
             Customer cust = new Customer();
-
-            // use specific fields prevent overposters! 
-
-            if (await TryUpdateModelAsync<Customer>(
-                      cust,
-                      "customer",
-                      s => s.CustId,
-                      s => s.CustPassword,
-                      s => s.CustFirst,
-                      s => s.CustMiddle,
-                      s => s.CustLast,
-                      s => s.CustGender,
-                      s => s.CustPhone,
-                      s => s.CustEmail,
-                      s => s.CustCity,
-                      s => s.CustState,
-                      s => s.CustZip,
-                      s => s.CustBirthDate,
-                      s => s.Encrypted,
-                      s => s.CustPlan,
-                      s => s.PromotionCode,
-                      s => s.AppId,
-                      s => s.ExtendColors,
-                      s => s.ClaimCount))
  
-            { 
 
                 var linqCustomer = from c in _context.Customer
                                    where c.CustId == customer.CustId
@@ -610,9 +580,7 @@ namespace A65Insurance.Controllers
 
                 return Ok("Ok");
                 
-            }
-
-            return BadRequest("unknown");
+           
         }
 
        
@@ -701,7 +669,7 @@ namespace A65Insurance.Controllers
         {
             Customer addCustomer = new Customer();
 
-            if (await TryUpdateModelAsync<Customer>(
+         /*   if (await TryUpdateModelAsync<Customer>(
                     addCustomer,
                     "AddCustomer",
                     s => s.CustId,
@@ -723,7 +691,7 @@ namespace A65Insurance.Controllers
                     s => s.ExtendColors,
                     s => s.ClaimCount))
 
-            {
+            { */
 
 
                 _context.Customer.Add(customer);
@@ -736,8 +704,8 @@ namespace A65Insurance.Controllers
 
                 return CreatedAtAction("GetCustomer", new { id = customer.Id }, customer);
 
-            }
-            return null;
+           /* }
+            return null; */
         }
 
 
@@ -746,30 +714,7 @@ namespace A65Insurance.Controllers
         public async Task<ActionResult<Customer>> PostCustomer70(Customer customer)
         {
             Customer addCustomer = new Customer();
-
-            if (await TryUpdateModelAsync<Customer>(
-                    addCustomer,
-                    "AddCustomer",
-                    s => s.CustId,
-                    s => s.CustPassword,
-                    s => s.CustFirst,
-                    s => s.CustMiddle,
-                    s => s.CustLast,
-                    s => s.CustGender,
-                    s => s.CustPhone,
-                    s => s.CustEmail,
-                    s => s.CustCity,
-                    s => s.CustState,
-                    s => s.CustZip,
-                    s => s.CustBirthDate,
-                    s => s.Encrypted,
-                    s => s.CustPlan,
-                    s => s.PromotionCode,
-                    s => s.AppId,
-                    s => s.ExtendColors,
-                    s => s.ClaimCount))
-
-            {
+ 
 
 
                 _context.Customer.Add(customer);
@@ -782,8 +727,7 @@ namespace A65Insurance.Controllers
 
                 return Ok(token);
 
-            }
-            return null;
+            
         }
         // DELETE: api/Customer/5
         [HttpDelete("{id}")]
